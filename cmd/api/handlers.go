@@ -52,19 +52,24 @@ func (app *application) getCreateCommentsHandler(w http.ResponseWriter, r *http.
 				},
 			},
 		}
-		js, err := json.Marshal(comments)
-		if err != nil {
+		if err := app.writeJSON(w, http.StatusOK, envelope{"comments": comments}); err != nil {
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			return
 		}
-		js = append(js, '\n')
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(js)
-		return
 	}
+
 	if r.Method == http.MethodPost {
-		fmt.Fprintln(w, `<h1>Came as hard</h1>`)
-		return
+		var input struct {
+			SenderName string `json:"senderName"`
+			Message    string `json:"message"`
+			Email      string `json:"email"`
+		}
+		err := app.readJSON(w, r, &input)
+		if err != nil {
+			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+			return
+		}
+		fmt.Fprintf(w, "%v\n", input)
 	}
 }
 
@@ -95,14 +100,10 @@ func (app *application) getComment(w http.ResponseWriter, r *http.Request) {
 			Address: "sulele04@gmail.com",
 		},
 	}
-	js, err := json.Marshal(comment)
-	if err != nil {
+	if err := app.writeJSON(w, http.StatusOK, envelope{"comment": comment}); err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
-	js = append(js, '\n')
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(js)
 }
 
 func (app *application) deleteComment(w http.ResponseWriter, r *http.Request) {

@@ -6,9 +6,9 @@ import (
 )
 
 type Comment struct {
-	ID         int64
-	TimePosted time.Time
-	SenderName string
-	Message    string
-	Email      mail.Address
+	ID         int64        `json:"id"`
+	TimePosted time.Time    `json:"-"`
+	SenderName string       `json:"senderName"`
+	Message    string       `json:"message"`
+	Email      mail.Address `json:"email,omitempty"`
 }

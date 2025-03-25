@@ -1,27 +1,73 @@
 package main
 
 import (
+	"SkillsForge-Backend/internal/data"
+	"database/sql"
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"time"
+
+	_ "github.com/lib/pq"
 )
 
-func main() {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/v1/healthcheck", healthcheck)
+const version = "1.0.0"
 
-	err := http.ListenAndServe(":8000", mux)
-	if err != nil {
-		log.Fatal(err)
-	}
+type config struct {
+	port int
+	env  string
+	dsn  string
+}
+type application struct {
+	config config
+	logger *log.Logger
+	models data.Models
 }
 
-func healthcheck(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
-		return
+func main() {
+	var cfg config
+
+	flag.IntVar(&cfg.port, "port", 5050, "API server port")
+	flag.StringVar(&cfg.env, "env", "dev", "Environment (dev|stage|prod)")
+	flag.StringVar(&cfg.dsn, "db-dsn", os.Getenv("COMMENTLIST_DB_DSN"), "PostgreSQL DSN")
+	flag.Parse()
+
+	cfg.dsn = "postgres://postgres:forge2025@localhost:5431/commentlist?sslmode=disable"
+
+	logger := log.New(os.Stdout, "", log.Ldate|log.Ltime)
+
+	db, err := sql.Open("postgres", cfg.dsn)
+	if err != nil {
+		logger.Fatal(err)
 	}
-	fmt.Fprintln(w, "status: available")
-	fmt.Fprintf(w, "environment: %s\n", "dev")
-	fmt.Fprintf(w, "version: %s\n", "1.0.0")
+	defer db.Close()
+
+	err = db.Ping()
+	if err != nil {
+		logger.Fatal(err)
+	}
+
+	logger.Printf("The database connection pool established")
+
+	app := &application{
+		config: cfg,
+		logger: logger,
+		models: data.NewModels(db),
+	}
+
+	addr := fmt.Sprintf(":%d", cfg.port)
+
+	srv := &http.Server{
+		Addr:         addr,
+		Handler:      app.route(),
+		IdleTimeout:  time.Minute,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 30 * time.Second,
+	}
+
+	logger.Printf("starting %s server on %s", cfg.env, addr)
+	err = srv.ListenAndServe()
+	log.Fatal(err)
 }

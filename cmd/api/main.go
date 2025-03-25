@@ -1,6 +1,7 @@
 package main
 
 import (
+	"SkillsForge-Backend/internal/data"
 	"database/sql"
 	"flag"
 	"fmt"
@@ -22,22 +23,20 @@ type config struct {
 type application struct {
 	config config
 	logger *log.Logger
+	models data.Models
 }
 
 func main() {
 	var cfg config
 
-	flag.IntVar(&cfg.port, "port", 8080, "API server port")
+	flag.IntVar(&cfg.port, "port", 5050, "API server port")
 	flag.StringVar(&cfg.env, "env", "dev", "Environment (dev|stage|prod)")
 	flag.StringVar(&cfg.dsn, "db-dsn", os.Getenv("COMMENTLIST_DB_DSN"), "PostgreSQL DSN")
 	flag.Parse()
 
-	logger := log.New(os.Stdout, "", log.Ldate|log.Ltime)
+	cfg.dsn = "postgres://postgres:forge2025@localhost:5431/commentlist?sslmode=disable"
 
-	app := &application{
-		config: cfg,
-		logger: logger,
-	}
+	logger := log.New(os.Stdout, "", log.Ldate|log.Ltime)
 
 	db, err := sql.Open("postgres", cfg.dsn)
 	if err != nil {
@@ -52,7 +51,14 @@ func main() {
 
 	logger.Printf("The database connection pool established")
 
+	app := &application{
+		config: cfg,
+		logger: logger,
+		models: data.NewModels(db),
+	}
+
 	addr := fmt.Sprintf(":%d", cfg.port)
+
 	srv := &http.Server{
 		Addr:         addr,
 		Handler:      app.route(),

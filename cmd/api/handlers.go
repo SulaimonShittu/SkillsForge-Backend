@@ -1,13 +1,12 @@
 package main
 
 import (
-	data "SkillsForge-Backend/cmd/internal"
+	"SkillsForge-Backend/internal/data"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
-	"net/mail"
 	"strconv"
-	"time"
 )
 
 func (app *application) healthcheck(w http.ResponseWriter, r *http.Request) {
@@ -32,27 +31,12 @@ func (app *application) healthcheck(w http.ResponseWriter, r *http.Request) {
 
 func (app *application) getCreateCommentsHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
-		comments := []data.Comment{
-			{
-				ID:         1,
-				TimePosted: time.Now(),
-				SenderName: "Paul Silas",
-				Message:    "I want to make enquiry about the project.",
-				Email: mail.Address{
-					Address: "sulele04@gmail.com",
-				},
-			},
-			{
-				ID:         2,
-				TimePosted: time.Now(),
-				SenderName: "Peter thomas",
-				Message:    "I want to make enquiry about the project.",
-				Email: mail.Address{
-					Address: "sulaimonshittu2004@gmail.com",
-				},
-			},
+		comments, err := app.models.Comments.GetAll()
+		if err != nil {
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			return
 		}
-		if err := app.writeJSON(w, http.StatusOK, envelope{"comments": comments}); err != nil {
+		if err := app.writeJSON(w, http.StatusOK, envelope{"comments": comments}, nil); err != nil {
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			return
 		}
@@ -69,7 +53,25 @@ func (app *application) getCreateCommentsHandler(w http.ResponseWriter, r *http.
 			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 			return
 		}
-		fmt.Fprintf(w, "%v\n", input)
+		comment := &data.Comment{
+			SenderName: input.SenderName,
+			Message:    input.Message,
+			Email:      input.Email,
+		}
+		err = app.models.Comments.Insert(comment)
+		if err != nil {
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			return
+		}
+
+		headers := make(http.Header)
+		headers.Set("Location", fmt.Sprintf("v1/comments/%d", comment.ID))
+
+		err = app.writeJSON(w, http.StatusCreated, envelope{"comment": comment}, headers)
+		if err != nil {
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			return
+		}
 	}
 }
 
@@ -91,16 +93,17 @@ func (app *application) getComment(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 		return
 	}
-	comment := data.Comment{
-		ID:         idInt,
-		TimePosted: time.Now(),
-		SenderName: "Paul Silas",
-		Message:    "I want to make enquiry about the project.",
-		Email: mail.Address{
-			Address: "sulele04@gmail.com",
-		},
+	comment, err := app.models.Comments.Get(idInt)
+	if err != nil {
+		switch {
+		case errors.Is(err, errors.New("record not found")):
+			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+		default:
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		}
+		return
 	}
-	if err := app.writeJSON(w, http.StatusOK, envelope{"comment": comment}); err != nil {
+	if err := app.writeJSON(w, http.StatusOK, envelope{"comment": comment}, nil); err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
@@ -108,9 +111,23 @@ func (app *application) getComment(w http.ResponseWriter, r *http.Request) {
 
 func (app *application) deleteComment(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Path[len("/v1/comments/"):]
-	idInt, err := strconv.Atoi(id)
+	idInt, err := strconv.ParseInt(id, 10, 64)
 	if err != nil {
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 	}
-	fmt.Println(idInt)
+	err = app.models.Comments.Delete(idInt)
+	if err != nil {
+		switch {
+		case errors.Is(err, errors.New("record not found")):
+			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+		default:
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		}
+		return
+	}
+	err = app.writeJSON(w, http.StatusOK, envelope{"message": "comment successfully deleted"}, nil)
+	if err != nil {
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
 }

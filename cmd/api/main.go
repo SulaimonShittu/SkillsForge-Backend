@@ -34,9 +34,10 @@ func main() {
 	flag.StringVar(&cfg.dsn, "db-dsn", os.Getenv("COMMENTLIST_DB_DSN"), "PostgreSQL DSN")
 	flag.Parse()
 
-	cfg.dsn = "postgres://postgres:forge2025@localhost:5431/commentlist?sslmode=disable"
+	cfg.dsn = "postgres://postgres:forge2025@postgres:5432/commentlist?sslmode=disable"
 
 	logger := log.New(os.Stdout, "", log.Ldate|log.Ltime)
+	logger.Println("Hello Web.")
 
 	db, err := sql.Open("postgres", cfg.dsn)
 	if err != nil {

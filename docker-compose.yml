@@ -1,0 +1,29 @@
+services:
+  my-go-app:
+    build: .
+    ports:
+      - "5050:5050"
+    environment:
+      - DATABASE_URL=postgres://postgres:forge2025@postgres:5432/commentlist?sslmode=disable
+    depends_on:
+      - postgres
+    networks:
+      - app-net
+
+  postgres:
+    image: postgres:15
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: forge2025
+      POSTGRES_DB: commentlist
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - app-net
+
+volumes:
+  pgdata:
+
+networks:
+  app-net:

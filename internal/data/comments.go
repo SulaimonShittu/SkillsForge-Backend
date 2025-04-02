@@ -66,8 +66,7 @@ func (c CommentModel) Delete(id int64) error {
 
 	query := `
 	DELETE FROM comments
-	WHERE id = $1
-	`
+	WHERE id = $1`
 	results, err := c.DB.Exec(query, id)
 	if err != nil {
 		return err

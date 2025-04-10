@@ -25,6 +25,19 @@ type application struct {
 	logger *log.Logger
 	models data.Models
 }
+type loginD struct {
+	HashedPassword string
+	SessionToken   string
+	CSRFToken      string
+}
+
+var passw, _ = hashPassword("forge2025")
+
+var users = map[string]loginD{
+	"admin": {
+		HashedPassword: string(passw),
+	},
+}
 
 func main() {
 	var cfg config

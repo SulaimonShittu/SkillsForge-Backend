@@ -7,9 +7,14 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 )
 
 func (app *application) healthcheck(w http.ResponseWriter, r *http.Request) {
+	if err := Authorize(r); err != nil {
+		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		return
+	}
 	if r.Method != http.MethodGet {
 		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 		return
@@ -30,6 +35,10 @@ func (app *application) healthcheck(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *application) getCreateCommentsHandler(w http.ResponseWriter, r *http.Request) {
+	if err := Authorize(r); err != nil {
+		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		return
+	}
 	if r.Method == http.MethodGet {
 		comments, err := app.models.Comments.GetAll()
 		if err != nil {
@@ -87,6 +96,11 @@ func (app *application) getDeleteCommentsHandler(w http.ResponseWriter, r *http.
 }
 
 func (app *application) getComment(w http.ResponseWriter, r *http.Request) {
+	if err := Authorize(r); err != nil {
+		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		return
+	}
+
 	id := r.URL.Path[len("/v1/comments/"):]
 	idInt, err := strconv.ParseInt(id, 10, 64)
 	if err != nil {
@@ -110,6 +124,11 @@ func (app *application) getComment(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *application) deleteComment(w http.ResponseWriter, r *http.Request) {
+	if err := Authorize(r); err != nil {
+		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		return
+	}
+
 	id := r.URL.Path[len("/v1/comments/"):]
 	idInt, err := strconv.ParseInt(id, 10, 64)
 	if err != nil {
@@ -130,4 +149,78 @@ func (app *application) deleteComment(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
+}
+
+func login(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, http.StatusText(http.StatusConflict), http.StatusConflict)
+		return
+	}
+
+	userName := r.FormValue("username")
+	password := r.FormValue("password")
+
+	user, ok := users[userName]
+	if !ok {
+		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		return
+	}
+
+	if checkPasswordHash(password, user.HashedPassword) == true {
+		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		return
+	}
+
+	sessionToken := generateSessionToken(32)
+	csrfToken := generateSessionToken(32)
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "csrf_token",
+		Value:    csrfToken,
+		Expires:  time.Now().Add(24 * time.Hour),
+		HttpOnly: false,
+	})
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "session_token",
+		Value:    sessionToken,
+		Expires:  time.Now().Add(24 * time.Hour),
+		HttpOnly: true,
+	})
+
+	user.SessionToken = sessionToken
+	user.CSRFToken = csrfToken
+	users[userName] = user
+
+	msg, err := json.Marshal("Logged in Successfully!")
+	if err != nil {
+		w.Write(msg)
+	}
+}
+
+func logout(w http.ResponseWriter, r *http.Request) {
+	if err := Authorize(r); err != nil {
+		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		return
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "csrf_token",
+		Value:    "",
+		Expires:  time.Now().Add(-time.Hour),
+		HttpOnly: false,
+	})
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "session_token",
+		Value:    "",
+		Expires:  time.Now().Add(-time.Hour),
+		HttpOnly: true,
+	})
+
+	user := users[r.FormValue("username")]
+	user.SessionToken = ""
+	user.CSRFToken = ""
+	users[r.FormValue("username")] = user
+
 }

@@ -1,13 +1,13 @@
 package main
 
 import (
+	"SkillsForge-Backend/internal/auth"
 	"SkillsForge-Backend/internal/data"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
-	"time"
 )
 
 func (app *application) healthcheck(w http.ResponseWriter, r *http.Request) {
@@ -150,7 +150,6 @@ func (app *application) deleteComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
-
 func login(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, http.StatusText(http.StatusConflict), http.StatusConflict)
@@ -166,61 +165,35 @@ func login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if checkPasswordHash(password, user.HashedPassword) == true {
+	if !checkPasswordHash(password, user.HashedPassword) {
 		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 		return
 	}
 
-	sessionToken := generateSessionToken(32)
-	csrfToken := generateSessionToken(32)
+	// Generate JWT Token
+	tokenString, err := auth.GenerateJWT(userName)
 
-	http.SetCookie(w, &http.Cookie{
-		Name:     "csrf_token",
-		Value:    csrfToken,
-		Expires:  time.Now().Add(24 * time.Hour),
-		HttpOnly: false,
-	})
-
-	http.SetCookie(w, &http.Cookie{
-		Name:     "session_token",
-		Value:    sessionToken,
-		Expires:  time.Now().Add(24 * time.Hour),
-		HttpOnly: true,
-	})
-
-	user.SessionToken = sessionToken
-	user.CSRFToken = csrfToken
-	users[userName] = user
-
-	msg, err := json.Marshal("Logged in Successfully!")
 	if err != nil {
-		w.Write(msg)
+		http.Error(w, "Error generating token", http.StatusInternalServerError)
+		return
 	}
+
+	// Send JWT token in response (not in cookie anymore)
+	response := map[string]string{
+		"message": "Logged in successfully!",
+		"token":   tokenString,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }
 
 func logout(w http.ResponseWriter, r *http.Request) {
-	if err := Authorize(r); err != nil {
-		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
-		return
+
+	response := map[string]string{
+		"message": "Logged out successfully! Please remove the token from your client.",
 	}
 
-	http.SetCookie(w, &http.Cookie{
-		Name:     "csrf_token",
-		Value:    "",
-		Expires:  time.Now().Add(-time.Hour),
-		HttpOnly: false,
-	})
-
-	http.SetCookie(w, &http.Cookie{
-		Name:     "session_token",
-		Value:    "",
-		Expires:  time.Now().Add(-time.Hour),
-		HttpOnly: true,
-	})
-
-	user := users[r.FormValue("username")]
-	user.SessionToken = ""
-	user.CSRFToken = ""
-	users[r.FormValue("username")] = user
-
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }
